@@ -85,7 +85,7 @@ class SimulationResult:
                 zorder=5
             )
 
-        ax.set_title(f"PathForge Simulation — {self.model_name} ({self.paths.shape[1]} paths)")
+        ax.set_title(f"PathForge Simulation, {self.model_name} ({self.paths.shape[1]} paths)")
         ax.set_xlabel("Days")
         ax.set_ylabel("Price")
         ax.grid()

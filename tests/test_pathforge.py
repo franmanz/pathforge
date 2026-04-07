@@ -74,4 +74,20 @@ def test_to_dataframe(price_series):
     assert df.shape == (51, 5)
     assert list(df.columns) == [f"path_{i}" for i in range(5)]
 
+
+def test_fit_routes_model_constructor_kwargs(price_series):
+    forge = pf.PathForge(price_series)
+    forge.fit(model="jump_diffusion", jump_threshold=2.5)
+    assert forge._model.jump_threshold == 2.5
+
+
+def test_fit_routes_model_fit_kwargs_to_markov_egarch(price_series):
+    short_prices = price_series.iloc[:200]
+    forge = pf.PathForge(short_prices)
+    forge.fit(model="markov_egarch", n_starts=1, max_iter=1)
+
+    transition_matrix = forge._model.params_["A"]
+    assert transition_matrix.shape == (3, 3)
+    assert np.isfinite(transition_matrix).all()
+
     

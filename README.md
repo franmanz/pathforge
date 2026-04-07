@@ -15,6 +15,7 @@ Testing a trading strategy on a single historical price series tells you how it 
 ## Installation
 ```bash
 pip install pathforge
+pip install numba  # required for markov_egarch model
 ```
 
 To use the built-in plot functionality:
@@ -50,6 +51,7 @@ df = sim.to_dataframe()  # shape: (253, 100)
 
 | Model | `model=` | Best for |
 |---|---|---|
+| Markov-switching EGARCH | `"markov_egarch"` | Research-grade: hidden regimes + volatility clustering + fat tails |
 | Geometric Brownian Motion | `"gbm"` | Fast baseline, simple assumptions |
 | GARCH(1,1) | `"garch"` | Realistic volatility clustering |
 | Block Bootstrap | `"bootstrap"` | Non-parametric, no distributional assumptions |
@@ -61,6 +63,30 @@ df = sim.to_dataframe()  # shape: (253, 100)
 - **GARCH** — best for most use cases, captures the volatility clustering seen in real markets
 - **Bootstrap** — most honest for strategy testing, resamples real historical behaviour directly
 - **Jump Diffusion** — best when your data contains sudden large moves you want to preserve
+- **Markov-switching EGARCH** — the most sophisticated model. Identifies hidden market regimes (calm, stressed, crisis) each with its own EGARCH volatility dynamics and Student-t innovations. Captures regime persistence, volatility clustering, leverage effects, and fat tails simultaneously. Requires minimum 2 years of daily data and Numba for speed optimisation.
+
+## Usage Notes
+
+### Markov-switching EGARCH
+The `markov_egarch` model has specific requirements and options:
+
+- **Minimum data**: 2 years of daily prices (500+ observations recommended)
+- **Fitting time**: ~1 minute on a modern machine (first call longer due to Numba JIT warmup)
+- **Dependencies**: requires `numba` — `pip install numba`
+```python
+forge = pf.PathForge(prices)
+forge.fit(
+    model="markov_egarch",
+    n_states=3,        # number of hidden regimes
+    n_starts=3,        # random restarts for EM algorithm
+    verbose=True,      # print fitting progress
+    random_state=42,   # for reproducibility
+    min_persistence=0.7  # minimum regime persistence (set to None to disable)
+)
+sim = forge.simulate(days=252, n_paths=100)
+```
+
+> **Note:** This model uses a generalised EM algorithm rather than an exact closed-form M-step. Volatility dynamics are modelled using state-specific, uncentred EGARCH filters, resulting in an approximate likelihood. This approach is designed for practical simulation and backtesting rather than exact state-space inference. See the [GitHub repository](https://github.com/franmanz/pathforge) for full technical details.
 
 ## API Reference
 
@@ -86,10 +112,11 @@ Returned by `.simulate()`.
 
 ## Roadmap
 
-- [ ] Poisson jump diffusion ✅
+- [x] Merton Jump Diffusion
+- [x] Markov-switching EGARCH with Student-t innovations
 - [ ] Intraday timeframes (1m, 5m, 15m, 1h)
 - [ ] Multi-asset correlated simulation
-- [ ] Regime switching model
+- [ ] Centred EGARCH specification
 - [ ] CLI: `pathforge simulate AAPL --days 252 --paths 500`
 
 ## Contributing
