@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pathforge"
-version = "0.2.0"
+version = "0.2.1"
 description = "Simulate realistic financial markets from historical price data"
 readme = "README.md"
 

@@ -271,12 +271,14 @@ class MarkovEGARCHModel(BaseModel):
                 be = np.clip(be, 0.5, 0.97)
                 nu_k = np.exp(np.clip(nu_raw, -5, 50)) + 2
                 nu_k = np.clip(nu_k, 4.0, 100.0)
-                om = np.clip(om, -6, 2)
+                om = np.clip(om, -5, 2)
+                al = np.clip(al, -1, 1)
+                ga = np.clip(ga, -1, 1)
 
                 sig = _egarch_loop_single(self.returns, om, al, ga, be)
                 ll = self._student_t_loglik(self.returns, sig, nu_k)
                 return -np.sum(weights * ll)
-
+            
             x0 = np.array([
                 omega[k],
                 alpha[k],
@@ -292,9 +294,9 @@ class MarkovEGARCHModel(BaseModel):
             )
 
             if result.success or result.fun < neg_weighted_ll(x0):
-                omega_new[k] = result.x[0]
-                alpha_new[k] = result.x[1]
-                gamma_new[k] = result.x[2]
+                omega_new[k] = np.clip(result.x[0], -5, 2)
+                alpha_new[k] = np.clip(result.x[1], -1, 1)
+                gamma_new[k] = np.clip(result.x[2], -1, 1)
                 beta_new[k] = np.clip(np.tanh(result.x[3]), 0.5, 0.97)
                 nu_new[k] = np.clip(np.exp(np.clip(result.x[4], -5, 50)) + 2, 4.0, 100.0)
             else:
@@ -420,6 +422,8 @@ class MarkovEGARCHModel(BaseModel):
             sigmas_final = self._egarch_volatility_all(omega, alpha, gamma_param, beta)
             avg_vol = np.array([
                 np.average(sigmas_final[k], weights=gamma_final[:, k])
+                if gamma_final[:, k].sum() > 1e-6
+                else np.exp(0.5 * np.clip(omega[k], -5, 2))
                 for k in range(K)
             ])
             order = np.argsort(avg_vol)
@@ -501,6 +505,7 @@ class MarkovEGARCHModel(BaseModel):
             prev_return = 0.0
 
             # Burn-in period — discard these steps
+            boundary_count = 0
             for _ in range(burn_in):
                 sigma = np.exp(0.5 * np.clip(log_sigma2, -10, 10))
                 z = prev_return / (sigma + 1e-300)
@@ -510,11 +515,19 @@ class MarkovEGARCHModel(BaseModel):
                     + beta[state] * log_sigma2,
                     -10, 10
                 )
+                if abs(log_sigma2) >= 9.9:
+                    boundary_count += 1
+                else:
+                    boundary_count = 0
+                if boundary_count >= 3:
+                    log_sigma2 = np.log(np.var(self.returns) + 1e-8)
+                    boundary_count = 0
                 sigma = np.exp(0.5 * log_sigma2)
                 prev_return = self._sample_student_t(sigma, nu[state])
                 state = np.random.choice(self.n_states, p=A[state])
 
             # Actual simulation
+            boundary_count = 0
             for t in range(days):
                 sigma = np.exp(0.5 * np.clip(log_sigma2, -10, 10))
                 z = prev_return / (sigma + 1e-300)
@@ -524,6 +537,13 @@ class MarkovEGARCHModel(BaseModel):
                     + beta[state] * log_sigma2,
                     -10, 10
                 )
+                if abs(log_sigma2) >= 9.9:
+                    boundary_count += 1
+                else:
+                    boundary_count = 0
+                if boundary_count >= 3:
+                    log_sigma2 = np.log(np.var(self.returns) + 1e-8)
+                    boundary_count = 0
                 sigma = np.exp(0.5 * log_sigma2)
                 r = self._sample_student_t(sigma, nu[state])
                 simulated[t, path] = r
